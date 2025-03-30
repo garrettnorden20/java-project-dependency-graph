@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Codebase Dependency Graph</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    svg { width: 100vw; height: 100vh; background: #111; }
+    circle { fill: #69b3a2; }
+    text { fill: #ccc; font-size: 10px; pointer-events: none; }
+    line { stroke: #999; stroke-opacity: 0.6; }
+  </style>
+</head>
+<body>
+  <svg></svg>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+  fetch('graph.json')
+    .then(res => res.json())
+    .then(data => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+  
+      // Calculate importance score = in-degree + out-degree
+      const importance = {};
+      data.nodes.forEach(n => importance[n.id] = 0);
+      data.links.forEach(l => {
+        importance[l.source] = (importance[l.source] || 0) + 1;
+        importance[l.target] = (importance[l.target] || 0) + 1;
+      });
+  
+      // Create zoomable SVG canvas
+      const svg = d3.select("svg");
+      const container = svg.append("g");
+  
+      const zoom = d3.zoom()
+        .scaleExtent([0.1, 5])
+        .on("zoom", (event) => {
+          container.attr("transform", event.transform);
+        });
+  
+      svg.call(zoom);
+  
+      const simulation = d3.forceSimulation(data.nodes)
+        .force("link", d3.forceLink(data.links).id(d => d.id).distance(60))
+        .force("charge", d3.forceManyBody().strength(-250))
+        .force("center", d3.forceCenter(width / 2, height / 2));
+  
+      const link = container.append("g")
+        .attr("stroke", "#999")
+        .attr("stroke-opacity", 0.6)
+        .selectAll("line")
+        .data(data.links)
+        .join("line")
+        .attr("stroke-width", 1);
+  
+      const node = container.append("g")
+        .attr("stroke", "#fff")
+        .attr("stroke-width", 1)
+        .selectAll("circle")
+        .data(data.nodes)
+        .join("circle")
+        .attr("r", d => Math.max(4, Math.sqrt(importance[d.id] || 1) * 1.5))
+        .attr("fill", "#69b3a2")
+        .call(drag(simulation));
+      node.append("title")
+        .text(d => d.id);
+  
+      const label = container.append("g")
+        .selectAll("text")
+        .data(data.nodes)
+        .join("text")
+        .text(d => {
+        const name = d.id.split('/').pop();           // filename or class name
+        const parts = name.split('.');
+        if (parts.length >= 2) {
+            return parts.slice(-2).join('.');           // e.g. Foo.java, List.class
+        }
+        return name;
+        })
+        .attr("x", 6)
+        .attr("y", 3)
+        .attr("fill", "#ccc")
+        .style("font-size", "10px");
+  
+      simulation.on("tick", () => {
+        link
+          .attr("x1", d => d.source.x)
+          .attr("y1", d => d.source.y)
+          .attr("x2", d => d.target.x)
+          .attr("y2", d => d.target.y);
+  
+        node
+          .attr("cx", d => d.x)
+          .attr("cy", d => d.y);
+  
+        label
+          .attr("x", d => d.x + 8)
+          .attr("y", d => d.y + 4);
+      });
+  
+      function drag(simulation) {
+        function dragstarted(event) {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          event.subject.fx = event.subject.x;
+          event.subject.fy = event.subject.y;
+        }
+  
+        function dragged(event) {
+          event.subject.fx = event.x;
+          event.subject.fy = event.y;
+        }
+  
+        function dragended(event) {
+          if (!event.active) simulation.alphaTarget(0);
+          event.subject.fx = null;
+          event.subject.fy = null;
+        }
+  
+        return d3.drag()
+          .on("start", dragstarted)
+          .on("drag", dragged)
+          .on("end", dragended);
+      }
+    });
+  </script>  
+</body>
+</html>
